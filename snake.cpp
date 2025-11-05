@@ -16,7 +16,6 @@
 #endif
 
 using namespace std;
-using namespace std::chrono;
 
 // === Structs ===
 struct Position {
@@ -67,18 +66,10 @@ vector<Position> obstacles;
 int score = 0, level = 1;
 bool gameOver = false;
 bool utf8 = true;
-Direction dir = RIGHT; 
-
-// === New Power-Up Variables ===
-Position powerUp;
-bool powerUpActive = false;
-steady_clock::time_point powerUpStart;
-steady_clock::time_point lastPowerUpSpawn;
-const int powerUpDuration = 8000; // 8 seconds
-const int powerUpInterval = 12000; // appear every ~12 sec
+Direction dir = RIGHT; // 🟢 define global direction
 
 // === Symbols ===
-string headSymbol = "🐍", bodySymbol = "🟩", foodSymbol = "🪶", wallSymbol = "🧱", powerUpSymbol = "🍒";
+string headSymbol = "🐍", bodySymbol = "🟩", foodSymbol = "🪶", wallSymbol = "🧱";
 
 // === Utility Functions ===
 void clearScreen() {
@@ -113,30 +104,10 @@ void generateFood() {
     }
 }
 
-// === Generate Power-Up ===
-void generatePowerUp() {
-    bool valid = false;
-    while (!valid) {
-        valid = true;
-        powerUp = {rand() % width, rand() % height};
-        for (auto &s : snake)
-            if (s.x == powerUp.x && s.y == powerUp.y)
-                valid = false;
-        for (auto &o : obstacles)
-            if (o.x == powerUp.x && o.y == powerUp.y)
-                valid = false;
-        if (food.x == powerUp.x && food.y == powerUp.y)
-            valid = false;
-    }
-    powerUpActive = true;
-    powerUpStart = steady_clock::now();
-}
-
 // === Draw Game Board ===
 void drawBoard() {
     moveCursorToTop();
     cout << "Score: " << score << "   Level: " << level << "\n";
-    cout << "Press ESC to Pause\n";
 
     for (int i = 0; i < width + 2; i++) cout << wallSymbol;
     cout << "\n";
@@ -161,12 +132,6 @@ void drawBoard() {
 
             if (!printed && x == food.x && y == food.y) {
                 cout << foodSymbol;
-                printed = true;
-            }
-
-            // Draw power-up if active
-            if (!printed && powerUpActive && x == powerUp.x && y == powerUp.y) {
-                cout << powerUpSymbol;
                 printed = true;
             }
 
@@ -195,9 +160,10 @@ void setupGame() {
     gameOver = false;
     dir = RIGHT;
 
+    // Generate food
     generateFood();
-    lastPowerUpSpawn = steady_clock::now();
 
+    // Add obstacles
     for (int i = 0; i < 5; i++) {
         Position o;
         do {
@@ -215,19 +181,17 @@ void resetGame() {
     score = 0;
     level = 1;
     gameOver = false;
+	
     utf8 = true;
-    dir = RIGHT;
-
     headSymbol = "🐍";
     bodySymbol = "🟩";
     foodSymbol = "🪶";
     wallSymbol = "🧱";
-    powerUpSymbol = "🍒";
 
+    // Regenerate new food
     food = {rand() % width, rand() % height};
-    powerUpActive = false;
-    lastPowerUpSpawn = steady_clock::now();
 
+    // Regenerate new obstacles
     for (int i = 0; i < 5; i++) {
         Position o;
         do {
@@ -260,47 +224,16 @@ void updateLevelAndSymbols() {
     }
 }
 
-// === Menus ===
-void showInstructions() {
-    clearScreen();
-    cout << "=== Instructions ===\n";
-    cout << "Use Arrow Keys or W A S D to move\n";
-    cout << "Eat food to grow and score points\n";
-    cout << "🍒 Power-Up appears every few seconds (3x growth, lasts 8 sec)\n";
-    cout << "Avoid walls and obstacles!\n\n";
-    cout << "Press any key to return...";
-    getch_custom();
-}
-
-int pauseMenu() {
-    clearScreen();
-    cout << "========== PAUSED ==========\n";
-    cout << "1️⃣  Continue\n";
-    cout << "2️⃣  Restart Game\n";
-    cout << "3️⃣  Instructions\n";
-    cout << "4️⃣  Quit to Main Menu\n";
-    cout << "============================\n";
-    cout << "Select an option: ";
-    char c = getch_custom();
-    return c - '0';
-}
-
 // === Game Logic ===
 void logic() {
-    // Power-up timer handling
-    auto now = steady_clock::now();
-    if (!powerUpActive && duration_cast<milliseconds>(now - lastPowerUpSpawn).count() > powerUpInterval)
-        generatePowerUp();
-
-    if (powerUpActive && duration_cast<milliseconds>(now - powerUpStart).count() > powerUpDuration)
-        powerUpActive = false;
-
     Position newHead = snake.front();
+
     if (dir == UP) newHead.y--;
     else if (dir == DOWN) newHead.y++;
     else if (dir == LEFT) newHead.x--;
     else if (dir == RIGHT) newHead.x++;
 
+    // Collision checks
     if (newHead.x < 0 || newHead.x >= width || newHead.y < 0 || newHead.y >= height)
         gameOver = true;
 
@@ -318,40 +251,46 @@ void logic() {
         score++;
         updateLevelAndSymbols();
         generateFood();
-    }
-    else if (powerUpActive && newHead.x == powerUp.x && newHead.y == powerUp.y) {
-        score += 3;
-        powerUpActive = false;
-        lastPowerUpSpawn = steady_clock::now();
-        for (int i = 0; i < 3; i++)
-            snake.push_back(snake.back()); // grow by 3
-    }
-    else {
+    } else {
         snake.pop_back();
     }
 }
 
-// === Game Loop ===
+// === Menus ===
+void showMenu() {
+    clearScreen();
+    cout << "==============================\n";
+    cout << "     🐍 SNAKE ADVENTURE 🐍    \n";
+    cout << "==============================\n\n";
+    cout << "1️⃣  Start Game\n";
+    cout << "2️⃣  Instructions\n";
+    cout << "3️⃣  Exit\n\n";
+    cout << "Select an option: ";
+}
+
+void showInstructions() {
+    clearScreen();
+    cout << "=== Instructions ===\n";
+    cout << "Use Arrow Keys or W A S D to move\n";
+    cout << "Eat food to grow and score points\n";
+    cout << "Avoid walls and obstacles!\n\n";
+    cout << "Press any key to return...";
+    getch_custom();
+}
+
+// === Main Game Loop ===
 void gameLoop() {
     while (!gameOver) {
         drawBoard();
-        sleep_ms(200);
+        sleep_ms(200); 
 
         if (kbhit_custom()) {
             char key = getch_custom();
-
-            if (key == 27) {
-                int choice = pauseMenu();
-                if (choice == 1) continue;
-                else if (choice == 2) { resetGame(); gameLoop(); return; }
-                else if (choice == 3) { showInstructions(); continue; }
-                else if (choice == 4) return;
-            }
-
             if ((key == 'w' && dir != DOWN) || (key == 's' && dir != UP) ||
                 (key == 'a' && dir != RIGHT) || (key == 'd' && dir != LEFT) ||
-                (key == 72 && dir != DOWN) || (key == 80 && dir != UP) ||
-                (key == 75 && dir != RIGHT) || (key == 77 && dir != LEFT)) {
+                (key == 72 && dir != DOWN) || (key == 80 && dir != UP) ||   // Arrow ↑ ↓
+                (key == 75 && dir != RIGHT) || (key == 77 && dir != LEFT))  // Arrow ← →
+            {
                 if (key == 'w' || key == 72) dir = UP;
                 else if (key == 's' || key == 80) dir = DOWN;
                 else if (key == 'a' || key == 75) dir = LEFT;
@@ -377,6 +316,7 @@ void gameLoop() {
 // === Main ===
 int main() {
     srand(time(0));
+
 #ifdef _WIN32
     system("chcp 65001 >nul");
     SetConsoleOutputCP(CP_UTF8);
@@ -384,16 +324,8 @@ int main() {
 
     int choice;
     do {
-        clearScreen();
-        cout << "==============================\n";
-        cout << "     🐍 SNAKE ADVENTURE 🐍    \n";
-        cout << "==============================\n\n";
-        cout << "1️⃣  Start Game\n";
-        cout << "2️⃣  Instructions\n";
-        cout << "3️⃣  Exit\n\n";
-        cout << "Select an option: ";
+        showMenu();
         cin >> choice;
-
         if (choice == 1) {
             setupGame();
             gameLoop();
