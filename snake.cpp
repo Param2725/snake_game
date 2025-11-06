@@ -80,12 +80,12 @@ private:
     string headSymbol = "🐍", bodySymbol = "🟩", foodSymbol = "🪶", wallSymbol = "🧱";
 
 public:
-    SnakeGame() { srand(time(0)); }
+    SnakeGame() { srand((unsigned)time(0)); }
 
     void showMenu();
     void showInstructions();
     void setupGame();
-    void resetGame();
+    void resetGame();             // fixed reset
     void generateFood();
     void updateLevelAndSymbols();
     void drawBoard();
@@ -119,7 +119,7 @@ void SnakeGame::drawBoard() {
         for (int x = 0; x < width; x++) {
             bool printed = false;
 
-            if (x == snake.front().x && y == snake.front().y) {
+            if (!snake.empty() && x == snake.front().x && y == snake.front().y) {
                 cout << headSymbol;
                 printed = true;
             } else {
@@ -147,23 +147,67 @@ void SnakeGame::drawBoard() {
 }
 
 void SnakeGame::setupGame() {
+    // Initialize basic state for a fresh game
     snake.clear();
     obstacles.clear();
-    snake.push_back({width / 2, height / 2});
     score = 0;
     level = 1;
     gameOver = false;
     dir = RIGHT;
+
+    // initial snake head in center
+    snake.push_back({width / 2, height / 2});
+
+    // generate food and obstacles after snake exists
     generateFood();
+
     for (int i = 0; i < 5; i++) {
         Position o;
-        do { o = {rand() % (width - 2) + 1, rand() % (height - 2) + 1}; }
-        while ((o.x == food.x && o.y == food.y) || (o.x == width / 2 && o.y == height / 2));
+        do {
+            o = {rand() % (width - 2) + 1, rand() % (height - 2) + 1};
+        } while ((o.x == food.x && o.y == food.y) || (o.x == width / 2 && o.y == height / 2));
         obstacles.push_back(o);
+    }
+
+    // ensure symbols reflect utf8 mode
+    if (utf8) {
+        headSymbol = "🐍"; bodySymbol = "🟩"; foodSymbol = "🪶"; wallSymbol = "🧱";
+    } else {
+        headSymbol = "@"; bodySymbol = "o"; foodSymbol = "*"; wallSymbol = "#";
     }
 }
 
-void SnakeGame::resetGame() { setupGame(); }
+// ---------- FIX: resetGame now completely resets all game state ----------
+void SnakeGame::resetGame() {
+    // Reset flags and scoring
+    score = 0;
+    level = 1;
+    gameOver = false;
+    dir = RIGHT;
+
+    // Reset display mode and symbols to defaults (utf8 kept as-is; change if you want)
+    utf8 = true;
+    headSymbol = "🐍";
+    bodySymbol = "🟩";
+    foodSymbol = "🪶";
+    wallSymbol = "🧱";
+
+    // Clear and reinitialize snake & obstacles & food
+    snake.clear();
+    obstacles.clear();
+    snake.push_back({width / 2, height / 2});
+
+    // Regenerate food and obstacles safely
+    generateFood();
+    for (int i = 0; i < 5; i++) {
+        Position o;
+        do {
+            o = {rand() % (width - 2) + 1, rand() % (height - 2) + 1};
+        } while ((o.x == food.x && o.y == food.y) || (o.x == width / 2 && o.y == height / 2));
+        obstacles.push_back(o);
+    }
+}
+// -------------------------------------------------------------------------
 
 void SnakeGame::updateLevelAndSymbols() {
     level = score / 5 + 1;
@@ -171,9 +215,11 @@ void SnakeGame::updateLevelAndSymbols() {
         if (score >= 10) foodSymbol = "🍏";
         else if (score >= 5) foodSymbol = "🍎";
         else foodSymbol = "🪶";
+
         if (score >= 10) wallSymbol = "🪨";
         else if (score >= 5) wallSymbol = "🌳";
         else wallSymbol = "🧱";
+
         headSymbol = "🐍";
         bodySymbol = "🟩";
     } else {
@@ -185,20 +231,29 @@ void SnakeGame::updateLevelAndSymbols() {
 }
 
 void SnakeGame::logic() {
+    if (snake.empty()) return; // safety
+
     Position newHead = snake.front();
     if (dir == UP) newHead.y--;
     else if (dir == DOWN) newHead.y++;
     else if (dir == LEFT) newHead.x--;
     else if (dir == RIGHT) newHead.x++;
 
+    // Collision checks
     if (newHead.x < 0 || newHead.x >= width || newHead.y < 0 || newHead.y >= height) gameOver = true;
     for (auto &o : obstacles) if (newHead.x == o.x && newHead.y == o.y) gameOver = true;
     for (auto &s : snake) if (newHead.x == s.x && newHead.y == s.y) gameOver = true;
 
     snake.push_front(newHead);
 
-    if (newHead.x == food.x && newHead.y == food.y) { score++; updateLevelAndSymbols(); generateFood(); }
-    else snake.pop_back();
+    if (newHead.x == food.x && newHead.y == food.y) {
+        score++;
+        updateLevelAndSymbols();
+        generateFood();
+    } else {
+        // normal move
+        snake.pop_back();
+    }
 }
 
 void SnakeGame::showMenu() {
@@ -223,11 +278,15 @@ void SnakeGame::showInstructions() {
 }
 
 void SnakeGame::gameLoop() {
+    // Ensure we start from a valid setup if somehow not initialized
+    if (snake.empty()) setupGame();
+
     while (!gameOver) {
         drawBoard();
         sleep_ms(200);
         if (kbhit_custom()) {
             char key = getch_custom();
+            // arrow keys on some terminals produce values >127; this mirrors earlier checks
             if ((key == 'w' && dir != DOWN) || (key == 's' && dir != UP) ||
                 (key == 'a' && dir != RIGHT) || (key == 'd' && dir != LEFT) ||
                 (key == 72 && dir != DOWN) || (key == 80 && dir != UP) ||
@@ -246,7 +305,11 @@ void SnakeGame::gameLoop() {
     cout << "Your Score: " << score << "\n\n";
     cout << "Play again? (y/n): ";
     char c; cin >> c;
-    if (c == 'y' || c == 'Y') { resetGame(); gameLoop(); }
+    if (c == 'y' || c == 'Y') {
+        // Use resetGame() which now clears everything properly
+        resetGame();
+        gameLoop();
+    }
 }
 
 // ==================== MAIN ============================
