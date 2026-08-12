@@ -70,12 +70,16 @@ class SnakeGame {
 private:
     int width = 20, height = 15;
     deque<Position> snake;
+    deque<Position> snake2;
     Position food;
     vector<Position> obstacles;
-    int score = 0, level = 1;
+    int score = 0, score2 = 0, level = 1;
     bool gameOver = false;
+    bool p1Lost = false;
+    bool p2Lost = false;
     bool utf8 = true;
     Direction dir = RIGHT;
+    Direction dir2 = LEFT;
 
     string headSymbol = "🐍", bodySymbol = "🟩", foodSymbol = "🪶", wallSymbol = "🧱";
 
@@ -102,6 +106,8 @@ void SnakeGame::generateFood() {
         food = {rand() % width, rand() % height};
         for (auto &s : snake)
             if (s.x == food.x && s.y == food.y) valid = false;
+        for (auto &s : snake2)
+            if (s.x == food.x && s.y == food.y) valid = false;
         for (auto &o : obstacles)
             if (o.x == food.x && o.y == food.y) valid = false;
     }
@@ -109,7 +115,7 @@ void SnakeGame::generateFood() {
 
 void SnakeGame::drawBoard() {
     moveCursorToTop();
-    cout << "Score: " << score << "   Level: " << level << "\n";
+    cout << "Player 1 Score: " << score << "   Player 2 Score: " << score2 << "   Level: " << level << "\n";
 
     for (int i = 0; i < width + 2; i++) cout << wallSymbol;
     cout << "\n";
@@ -122,12 +128,24 @@ void SnakeGame::drawBoard() {
             if (!snake.empty() && x == snake.front().x && y == snake.front().y) {
                 cout << headSymbol;
                 printed = true;
+            } else if (!snake2.empty() && x == snake2.front().x && y == snake2.front().y) {
+                cout << headSymbol;
+                printed = true;
             } else {
                 for (size_t i = 1; i < snake.size(); i++) {
                     if (snake[i].x == x && snake[i].y == y) {
                         cout << bodySymbol;
                         printed = true;
                         break;
+                    }
+                }
+                if (!printed) {
+                    for (size_t i = 1; i < snake2.size(); i++) {
+                        if (snake2[i].x == x && snake2[i].y == y) {
+                            cout << bodySymbol;
+                            printed = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -149,14 +167,21 @@ void SnakeGame::drawBoard() {
 void SnakeGame::setupGame() {
     // Initialize basic state for a fresh game
     snake.clear();
+    snake2.clear();
     obstacles.clear();
     score = 0;
+    score2 = 0;
     level = 1;
     gameOver = false;
+    p1Lost = false;
+    p2Lost = false;
     dir = RIGHT;
+    dir2 = LEFT;
 
     // initial snake head in center
     snake.push_back({width / 2, height / 2});
+    // initial snake 2 head
+    snake2.push_back({width / 2, height / 2 + 3});
 
     // generate food and obstacles after snake exists
     generateFood();
@@ -165,7 +190,9 @@ void SnakeGame::setupGame() {
         Position o;
         do {
             o = {rand() % (width - 2) + 1, rand() % (height - 2) + 1};
-        } while ((o.x == food.x && o.y == food.y) || (o.x == width / 2 && o.y == height / 2));
+        } while ((o.x == food.x && o.y == food.y) || 
+                 (o.x == width / 2 && o.y == height / 2) || 
+                 (o.x == width / 2 && o.y == height / 2 + 3));
         obstacles.push_back(o);
     }
 
@@ -181,9 +208,13 @@ void SnakeGame::setupGame() {
 void SnakeGame::resetGame() {
     // Reset flags and scoring
     score = 0;
+    score2 = 0;
     level = 1;
     gameOver = false;
+    p1Lost = false;
+    p2Lost = false;
     dir = RIGHT;
+    dir2 = LEFT;
 
     // Reset display mode and symbols to defaults (utf8 kept as-is; change if you want)
     utf8 = true;
@@ -194,8 +225,10 @@ void SnakeGame::resetGame() {
 
     // Clear and reinitialize snake & obstacles & food
     snake.clear();
+    snake2.clear();
     obstacles.clear();
     snake.push_back({width / 2, height / 2});
+    snake2.push_back({width / 2, height / 2 + 3});
 
     // Regenerate food and obstacles safely
     generateFood();
@@ -203,21 +236,24 @@ void SnakeGame::resetGame() {
         Position o;
         do {
             o = {rand() % (width - 2) + 1, rand() % (height - 2) + 1};
-        } while ((o.x == food.x && o.y == food.y) || (o.x == width / 2 && o.y == height / 2));
+        } while ((o.x == food.x && o.y == food.y) || 
+                 (o.x == width / 2 && o.y == height / 2) || 
+                 (o.x == width / 2 && o.y == height / 2 + 3));
         obstacles.push_back(o);
     }
 }
 // -------------------------------------------------------------------------
 
 void SnakeGame::updateLevelAndSymbols() {
-    level = score / 5 + 1;
+    int maxScore = (score > score2) ? score : score2;
+    level = maxScore / 5 + 1;
     if (utf8) {
-        if (score >= 10) foodSymbol = "🍏";
-        else if (score >= 5) foodSymbol = "🍎";
+        if (maxScore >= 10) foodSymbol = "🍏";
+        else if (maxScore >= 5) foodSymbol = "🍎";
         else foodSymbol = "🪶";
 
-        if (score >= 10) wallSymbol = "🪨";
-        else if (score >= 5) wallSymbol = "🌳";
+        if (maxScore >= 10) wallSymbol = "🪨";
+        else if (maxScore >= 5) wallSymbol = "🌳";
         else wallSymbol = "🧱";
 
         headSymbol = "🐍";
@@ -231,28 +267,96 @@ void SnakeGame::updateLevelAndSymbols() {
 }
 
 void SnakeGame::logic() {
-    if (snake.empty()) return; // safety
+    if (snake.empty() || snake2.empty()) return; // safety
 
-    Position newHead = snake.front();
-    if (dir == UP) newHead.y--;
-    else if (dir == DOWN) newHead.y++;
-    else if (dir == LEFT) newHead.x--;
-    else if (dir == RIGHT) newHead.x++;
+    Position newHead1 = snake.front();
+    if (dir == UP) newHead1.y--;
+    else if (dir == DOWN) newHead1.y++;
+    else if (dir == LEFT) newHead1.x--;
+    else if (dir == RIGHT) newHead1.x++;
 
-    // Collision checks
-    if (newHead.x < 0 || newHead.x >= width || newHead.y < 0 || newHead.y >= height) gameOver = true;
-    for (auto &o : obstacles) if (newHead.x == o.x && newHead.y == o.y) gameOver = true;
-    for (auto &s : snake) if (newHead.x == s.x && newHead.y == s.y) gameOver = true;
+    Position newHead2 = snake2.front();
+    if (dir2 == UP) newHead2.y--;
+    else if (dir2 == DOWN) newHead2.y++;
+    else if (dir2 == LEFT) newHead2.x--;
+    else if (dir2 == RIGHT) newHead2.x++;
 
-    snake.push_front(newHead);
+    // Collision checks for Player 1
+    if (newHead1.x < 0 || newHead1.x >= width || newHead1.y < 0 || newHead1.y >= height) {
+        gameOver = true;
+        p1Lost = true;
+    }
+    for (auto &o : obstacles) {
+        if (newHead1.x == o.x && newHead1.y == o.y) {
+            gameOver = true;
+            p1Lost = true;
+        }
+    }
+    for (auto &s : snake) {
+        if (newHead1.x == s.x && newHead1.y == s.y) {
+            gameOver = true;
+            p1Lost = true;
+        }
+    }
+    for (auto &s : snake2) {
+        if (newHead1.x == s.x && newHead1.y == s.y) {
+            gameOver = true;
+            p1Lost = true;
+        }
+    }
 
-    if (newHead.x == food.x && newHead.y == food.y) {
+    // Collision checks for Player 2
+    if (newHead2.x < 0 || newHead2.x >= width || newHead2.y < 0 || newHead2.y >= height) {
+        gameOver = true;
+        p2Lost = true;
+    }
+    for (auto &o : obstacles) {
+        if (newHead2.x == o.x && newHead2.y == o.y) {
+            gameOver = true;
+            p2Lost = true;
+        }
+    }
+    for (auto &s : snake2) {
+        if (newHead2.x == s.x && newHead2.y == s.y) {
+            gameOver = true;
+            p2Lost = true;
+        }
+    }
+    for (auto &s : snake) {
+        if (newHead2.x == s.x && newHead2.y == s.y) {
+            gameOver = true;
+            p2Lost = true;
+        }
+    }
+
+    // Head-on collision check
+    if (newHead1.x == newHead2.x && newHead1.y == newHead2.y) {
+        gameOver = true;
+        p1Lost = true;
+        p2Lost = true;
+    }
+
+    snake.push_front(newHead1);
+    snake2.push_front(newHead2);
+
+    bool p1Ate = (newHead1.x == food.x && newHead1.y == food.y);
+    bool p2Ate = (newHead2.x == food.x && newHead2.y == food.y);
+
+    if (p1Ate) {
         score++;
+    } else {
+        snake.pop_back();
+    }
+
+    if (p2Ate) {
+        score2++;
+    } else {
+        snake2.pop_back();
+    }
+
+    if (p1Ate || p2Ate) {
         updateLevelAndSymbols();
         generateFood();
-    } else {
-        // normal move
-        snake.pop_back();
     }
 }
 
@@ -286,15 +390,21 @@ void SnakeGame::gameLoop() {
         sleep_ms(200);
         if (kbhit_custom()) {
             char key = getch_custom();
-            // arrow keys on some terminals produce values >127; this mirrors earlier checks
-            if ((key == 'w' && dir != DOWN) || (key == 's' && dir != UP) ||
-                (key == 'a' && dir != RIGHT) || (key == 'd' && dir != LEFT) ||
-                (key == 72 && dir != DOWN) || (key == 80 && dir != UP) ||
+            // Player 1 controls (Arrow keys only)
+            if ((key == 72 && dir != DOWN) || (key == 80 && dir != UP) ||
                 (key == 75 && dir != RIGHT) || (key == 77 && dir != LEFT)) {
-                if (key == 'w' || key == 72) dir = UP;
-                else if (key == 's' || key == 80) dir = DOWN;
-                else if (key == 'a' || key == 75) dir = LEFT;
-                else if (key == 'd' || key == 77) dir = RIGHT;
+                if (key == 72) dir = UP;
+                else if (key == 80) dir = DOWN;
+                else if (key == 75) dir = LEFT;
+                else if (key == 77) dir = RIGHT;
+            }
+            // Player 2 controls (W A S D)
+            if ((key == 'w' && dir2 != DOWN) || (key == 's' && dir2 != UP) ||
+                (key == 'a' && dir2 != RIGHT) || (key == 'd' && dir2 != LEFT)) {
+                if (key == 'w') dir2 = UP;
+                else if (key == 's') dir2 = DOWN;
+                else if (key == 'a') dir2 = LEFT;
+                else if (key == 'd') dir2 = RIGHT;
             }
         }
         logic();
@@ -302,7 +412,15 @@ void SnakeGame::gameLoop() {
 
     clearScreen();
     cout << "💀 Game Over! 💀\n";
-    cout << "Your Score: " << score << "\n\n";
+    if (p1Lost && p2Lost) {
+        cout << "Both Players Lost!\n";
+    } else if (p1Lost) {
+        cout << "Player 1 Lost!\n";
+    } else if (p2Lost) {
+        cout << "Player 2 Lost!\n";
+    }
+    cout << "Player 1 Score: " << score << "\n";
+    cout << "Player 2 Score: " << score2 << "\n\n";
     cout << "Play again? (y/n): ";
     char c; cin >> c;
     if (c == 'y' || c == 'Y') {
