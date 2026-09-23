@@ -91,6 +91,11 @@ public:
     void drawBoard();
     void logic();
     void gameLoop();
+    // Seam (Lab 4, Part D): read-only accessor for game-over state, so a
+    // test can observe the outcome of logic() without needing gameLoop()'s
+    // blocking keyboard/cin input. Returns the same value gameLoop() already
+    // checks internally (`while (!gameOver)`) — adds no new behaviour.
+    bool isGameOver() const { return gameOver; }
 };
 
 // ================= CLASS METHODS ====================
